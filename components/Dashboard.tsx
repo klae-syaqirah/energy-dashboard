@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import type { Summary } from "@/app/api/summary/route";
 import { Gauge, LoadChart, PhaseHistoryChart, Sparkline, WeeklyBars, niceMax } from "@/components/charts";
 
-const POLL_MS = 10_000;
+const POLL_MS = 5_000;
 
 const CLOCK_FMT = new Intl.DateTimeFormat("en-GB", {
   weekday: "short",
@@ -95,7 +95,7 @@ export default function Dashboard() {
       <header>
         <div className="brand">
           <h1>Factory Energy Monitor</h1>
-          <p>PQM-1000s · Modbus RTU · updates every 10 s</p>
+          <p>PQM-1000s · Modbus RTU · updates every 5 s</p>
         </div>
         <div className="head-right">
           <span className="live">

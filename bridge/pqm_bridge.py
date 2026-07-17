@@ -167,7 +167,7 @@ def main() -> None:
     ap.add_argument("--port", default="COM3")
     ap.add_argument("--addr", type=int, default=1)
     ap.add_argument("--baud", type=int, default=9600)
-    ap.add_argument("--interval", type=float, default=10.0, help="seconds between readings")
+    ap.add_argument("--interval", type=float, default=5.0, help="seconds between readings")
     ap.add_argument("--once", action="store_true", help="read once and exit")
     ap.add_argument("--push", action="store_true", help="POST readings to the dashboard API")
     ap.add_argument("--local", action="store_true",
