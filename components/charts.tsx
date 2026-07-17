@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import type { SummaryBucket } from "@/app/api/summary/route";
+import type { PhaseBucket, SummaryBucket } from "@/app/api/summary/route";
 
 const KL_OFFSET_MS = 8 * 3600 * 1000;
 
@@ -21,7 +21,7 @@ export function fmtTimeKL(epochSec: number): string {
 
 /** Smallest "nice" axis maximum that fits v. */
 export function niceMax(v: number, floor = 10): number {
-  const candidates = [10, 15, 20, 30, 40, 60, 80, 100, 150, 200, 300, 400, 600, 800, 1000, 1500, 2000];
+  const candidates = [1, 1.5, 2, 3, 4, 5, 6, 8, 10, 15, 20, 30, 40, 60, 80, 100, 150, 200, 300, 400, 600, 800, 1000, 1500, 2000];
   const target = Math.max(v * 1.1, floor);
   for (const c of candidates) if (c >= target) return c;
   return Math.ceil(target / 1000) * 1000;
@@ -293,6 +293,191 @@ export function WeeklyBars({
       <div className="legend">
         <span><i style={{ background: "var(--bar-peak)" }} />{peakLabel}</span>
         <span><i style={{ background: "var(--bar-off)" }} />Off-peak</span>
+      </div>
+    </>
+  );
+}
+
+/* =====================  Phase history (7 / 30 days)  ===================== */
+
+const P = { w: 860, h: 300, l: 46, r: 42, t: 20, b: 30 };
+const pPlotW = P.w - P.l - P.r;
+const pPlotH = P.h - P.t - P.b;
+
+const PHASES = [
+  { name: "L1", tok: "--phase-1", a: "a1", k: "k1" },
+  { name: "L2", tok: "--phase-2", a: "a2", k: "k2" },
+  { name: "L3", tok: "--phase-3", a: "a3", k: "k3" },
+] as const;
+
+const FMT_DAY = new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", timeZone: "Asia/Kuala_Lumpur" });
+const FMT_DATE = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", timeZone: "Asia/Kuala_Lumpur" });
+
+export function PhaseHistoryChart({ hourly, daily }: { hourly: PhaseBucket[]; daily: PhaseBucket[] }) {
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [range, setRange] = useState<"7d" | "30d">("7d");
+  const [metric, setMetric] = useState<"a" | "kw">("a");
+  const [hover, setHover] = useState<{ i: number; left: number; top: number } | null>(null);
+
+  const data = range === "7d" ? hourly : daily;
+  const unit = metric === "a" ? "A" : "kW";
+  const val = (b: PhaseBucket, p: (typeof PHASES)[number]) => (metric === "a" ? b[p.a] : b[p.k]);
+
+  const controls = (
+    <div className="chart-controls">
+      <div className="seg" role="group" aria-label="Time range">
+        <button className={range === "7d" ? "on" : ""} onClick={() => setRange("7d")}>7 days</button>
+        <button className={range === "30d" ? "on" : ""} onClick={() => setRange("30d")}>30 days</button>
+      </div>
+      <div className="seg" role="group" aria-label="Metric">
+        <button className={metric === "a" ? "on" : ""} onClick={() => setMetric("a")}>Current (A)</button>
+        <button className={metric === "kw" ? "on" : ""} onClick={() => setMetric("kw")}>Power (kW)</button>
+      </div>
+    </div>
+  );
+
+  if (data.length < 2) {
+    return (
+      <>
+        {controls}
+        <p className="phase-desc">Not enough history yet — leave the bridge running and this chart fills itself in.</p>
+      </>
+    );
+  }
+
+  const e0 = data[0].e;
+  const e1 = data[data.length - 1].e;
+  const x = (e: number) => P.l + ((e - e0) / Math.max(1, e1 - e0)) * pPlotW;
+  const yMax = niceMax(
+    data.reduce((m, b) => Math.max(m, ...PHASES.map((p) => val(b, p) ?? 0)), 0),
+    1
+  );
+  const y = (v: number) => P.t + (1 - v / yMax) * pPlotH;
+  const fmtTick = (v: number) => (Number.isInteger(v) ? String(v) : v.toFixed(1));
+  const fmtX = (e: number) => (range === "7d" ? FMT_DAY : FMT_DATE).format(new Date(e * 1000));
+
+  const xTicks = [0, 0.2, 0.4, 0.6, 0.8, 1].map((f) => e0 + f * (e1 - e0));
+
+  const lines = PHASES.map((p) => {
+    const pts = data
+      .map((b) => ({ e: b.e, v: val(b, p) }))
+      .filter((q): q is { e: number; v: number } => q.v !== null);
+    return { ...p, pts };
+  });
+
+  // right-edge direct labels, nudged apart so they never overlap
+  const endLabels = lines
+    .filter((l) => l.pts.length > 0)
+    .map((l) => ({ name: l.name, tok: l.tok, y: y(l.pts[l.pts.length - 1].v) }))
+    .sort((a, b) => a.y - b.y);
+  for (let i = 1; i < endLabels.length; i++) {
+    if (endLabels[i].y < endLabels[i - 1].y + 13) endLabels[i].y = endLabels[i - 1].y + 13;
+  }
+
+  function onMove(evt: React.MouseEvent<SVGSVGElement>) {
+    if (!wrapRef.current) return;
+    const rect = evt.currentTarget.getBoundingClientRect();
+    const mx = ((evt.clientX - rect.left) / rect.width) * P.w;
+    const eAt = e0 + ((mx - P.l) / pPlotW) * (e1 - e0);
+    let best = 0;
+    for (let i = 1; i < data.length; i++) {
+      if (Math.abs(data[i].e - eAt) < Math.abs(data[best].e - eAt)) best = i;
+    }
+    const wrapW = wrapRef.current.clientWidth;
+    const px = (x(data[best].e) / P.w) * wrapW;
+    let left = px + 14;
+    if (left + 175 > wrapW) left = px - 190;
+    setHover({ i: best, left, top: 24 });
+  }
+
+  const hovered = hover ? data[hover.i] : null;
+
+  return (
+    <>
+      {controls}
+      <div className="chart-wrap" ref={wrapRef}>
+        <svg
+          viewBox={`0 0 ${P.w} ${P.h}`}
+          role="img"
+          aria-label={`Line chart of average ${metric === "a" ? "current" : "power"} per phase over the last ${range === "7d" ? "7" : "30"} days`}
+          onMouseMove={onMove}
+          onMouseLeave={() => setHover(null)}
+        >
+          {[0, 0.25, 0.5, 0.75, 1].map((f) => {
+            const v = f * yMax;
+            return (
+              <g key={f}>
+                <line x1={P.l} y1={y(v)} x2={P.l + pPlotW} y2={y(v)} stroke={v === 0 ? "var(--axis)" : "var(--grid)"} strokeWidth={1} />
+                <text x={P.l - 8} y={y(v) + 4} fontSize={11} textAnchor="end" fill="var(--muted)">{fmtTick(v)}</text>
+              </g>
+            );
+          })}
+          {xTicks.map((e, i) => (
+            <text key={i} x={x(e)} y={P.t + pPlotH + 20} fontSize={11} textAnchor="middle" fill="var(--muted)">
+              {fmtX(e)}
+            </text>
+          ))}
+
+          {lines.map((l) =>
+            l.pts.length > 1 ? (
+              <path
+                key={l.name}
+                d={l.pts.map((q, i) => `${i === 0 ? "M" : "L"}${x(q.e).toFixed(1)} ${y(q.v).toFixed(1)}`).join(" ")}
+                fill="none"
+                stroke={`var(${l.tok})`}
+                strokeWidth={2}
+                strokeLinejoin="round"
+                strokeLinecap="round"
+              />
+            ) : null
+          )}
+          {lines.map((l) => {
+            const lastPt = l.pts[l.pts.length - 1];
+            return lastPt ? (
+              <circle key={l.name} cx={x(lastPt.e)} cy={y(lastPt.v)} r={3.5} fill={`var(${l.tok})`} stroke="var(--surface)" strokeWidth={1.5} />
+            ) : null;
+          })}
+          {endLabels.map((l) => (
+            <g key={l.name}>
+              <rect x={P.l + pPlotW + 8} y={l.y - 4} width={8} height={8} rx={2} fill={`var(${l.tok})`} />
+              <text x={P.l + pPlotW + 20} y={l.y + 4} fontSize={11.5} fontWeight={650} fill="var(--ink)">{l.name}</text>
+            </g>
+          ))}
+
+          {hovered && (
+            <line x1={x(hovered.e)} y1={P.t} x2={x(hovered.e)} y2={P.t + pPlotH} stroke="var(--muted)" strokeWidth={1} strokeDasharray="2 3" />
+          )}
+          {hovered &&
+            PHASES.map((p) => {
+              const v = val(hovered, p);
+              return v !== null ? (
+                <circle key={p.name} cx={x(hovered.e)} cy={y(v)} r={4} fill={`var(${p.tok})`} stroke="var(--surface)" strokeWidth={2} />
+              ) : null;
+            })}
+        </svg>
+        <div className={`tooltip${hovered ? " on" : ""}`} style={hover ? { left: hover.left, top: hover.top } : undefined}>
+          {hovered && (
+            <>
+              <div className="t-title">
+                {range === "7d" ? `${FMT_DAY.format(new Date(hovered.e * 1000))} · ${fmtTimeKL(hovered.e)}` : FMT_DATE.format(new Date(hovered.e * 1000))}
+              </div>
+              {PHASES.map((p) => {
+                const v = val(hovered, p);
+                return (
+                  <div className="t-row" key={p.name}>
+                    <span><span className="tt-swatch" style={{ background: `var(${p.tok})` }} />{p.name}</span>
+                    <b>{v === null ? "—" : `${v.toFixed(metric === "a" ? 1 : 2)} ${unit}`}</b>
+                  </div>
+                );
+              })}
+            </>
+          )}
+        </div>
+      </div>
+      <div className="legend">
+        {PHASES.map((p) => (
+          <span key={p.name}><i style={{ background: `var(${p.tok})` }} />Phase {p.name}</span>
+        ))}
       </div>
     </>
   );

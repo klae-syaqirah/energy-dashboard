@@ -170,6 +170,9 @@ def main() -> None:
     ap.add_argument("--interval", type=float, default=10.0, help="seconds between readings")
     ap.add_argument("--once", action="store_true", help="read once and exit")
     ap.add_argument("--push", action="store_true", help="POST readings to the dashboard API")
+    ap.add_argument("--local", action="store_true",
+                    help="with --push: send to http://localhost:3000 instead of PQM_API_URL")
+    ap.add_argument("--url", help="with --push: override the API URL entirely")
     ap.add_argument("--wordorder", choices=["big", "little"], default="big",
                     help="32/64-bit register word order (default: big = high word first)")
     args = ap.parse_args()
@@ -182,11 +185,12 @@ def main() -> None:
     if args.push:
         import requests
 
-        api_url = os.environ.get("PQM_API_URL")
+        api_url = args.url or ("http://localhost:3000" if args.local else os.environ.get("PQM_API_URL"))
         api_key = os.environ.get("PQM_API_KEY")
         if not api_url or not api_key:
             sys.exit("--push needs PQM_API_URL and PQM_API_KEY (env or bridge/.env)")
         session = requests.Session()
+        print(f"Pushing to {api_url}")
 
     inst = make_instrument(args.port, args.addr, args.baud)
     settings = read_settings(inst)

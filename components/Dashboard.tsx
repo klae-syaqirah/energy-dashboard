@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { Summary } from "@/app/api/summary/route";
-import { Gauge, LoadChart, Sparkline, WeeklyBars, niceMax } from "@/components/charts";
+import { Gauge, LoadChart, PhaseHistoryChart, Sparkline, WeeklyBars, niceMax } from "@/components/charts";
 
 const POLL_MS = 10_000;
 
@@ -227,6 +227,14 @@ export default function Dashboard() {
               peakStartHour={data.config.peakStartHour}
               peakEndHour={data.config.peakEndHour}
             />
+          </div>
+
+          <div className="card">
+            <h2 className="section-title">Phase history</h2>
+            <p className="section-sub">
+              Average per phase — spot imbalance between L1 / L2 / L3 over time
+            </p>
+            <PhaseHistoryChart hourly={data.phaseHistory.hourly} daily={data.phaseHistory.daily} />
           </div>
 
           <div className="card">

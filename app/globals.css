@@ -253,6 +253,12 @@ header {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
+.chart-controls {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
 .gauge {
   max-width: 210px;
   margin: 2px auto 0;

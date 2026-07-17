@@ -20,6 +20,16 @@ export type SummaryBucket = {
   a3: number | null;
 };
 
+export type PhaseBucket = {
+  e: number;
+  a1: number | null;
+  a2: number | null;
+  a3: number | null;
+  k1: number | null;
+  k2: number | null;
+  k3: number | null;
+};
+
 export type Summary = {
   latest: {
     ts: string;
@@ -41,6 +51,10 @@ export type Summary = {
     kwhOff: number;
   };
   daily: { label: string; peak: number; off: number; today: boolean }[];
+  phaseHistory: {
+    hourly: PhaseBucket[]; // last 7 days, 1-hour buckets
+    daily: PhaseBucket[]; // last 30 days, 1-KL-day buckets
+  };
   config: {
     peakStartHour: number;
     peakEndHour: number;
@@ -67,8 +81,9 @@ async function buildSummary() {
   const sql = getSql();
   const todayStart = klMidnightUtc(0);
   const weekStart = klMidnightUtc(6);
+  const monthStart = klMidnightUtc(29);
 
-  const [latestRows, todayRows, weekRows] = await Promise.all([
+  const [latestRows, todayRows, weekRows, monthRows] = await Promise.all([
     sql`SELECT ts, v1, v2, v3, a1, a2, a3, kw1, kw2, kw3,
                kw_total AS "kwTotal", pf, freq, energy_kwh AS "energyKwh",
                energy_export_kwh AS "energyExportKwh",
@@ -79,8 +94,16 @@ async function buildSummary() {
         FROM readings WHERE ts >= ${todayStart.toISOString()}
         GROUP BY 1 ORDER BY 1`,
     sql`SELECT floor(extract(epoch FROM ts) / 3600) * 3600 AS e,
-               avg(kw_total) AS kw
+               avg(kw_total) AS kw,
+               avg(a1) AS a1, avg(a2) AS a2, avg(a3) AS a3,
+               avg(kw1) AS k1, avg(kw2) AS k2, avg(kw3) AS k3
         FROM readings WHERE ts >= ${weekStart.toISOString()}
+        GROUP BY 1 ORDER BY 1`,
+    // 1-KL-day buckets (UTC+8 = 28800 s shift)
+    sql`SELECT floor((extract(epoch FROM ts) + 28800) / 86400) * 86400 - 28800 AS e,
+               avg(a1) AS a1, avg(a2) AS a2, avg(a3) AS a3,
+               avg(kw1) AS k1, avg(kw2) AS k2, avg(kw3) AS k3
+        FROM readings WHERE ts >= ${monthStart.toISOString()}
         GROUP BY 1 ORDER BY 1`,
   ]);
 
@@ -131,6 +154,16 @@ async function buildSummary() {
       }
     : null;
 
+  const toPhaseBucket = (r: Record<string, unknown>): PhaseBucket => ({
+    e: Number(r.e),
+    a1: r.a1 === null ? null : Number(r.a1),
+    a2: r.a2 === null ? null : Number(r.a2),
+    a3: r.a3 === null ? null : Number(r.a3),
+    k1: r.k1 === null ? null : Number(r.k1),
+    k2: r.k2 === null ? null : Number(r.k2),
+    k3: r.k3 === null ? null : Number(r.k3),
+  });
+
   const summary: Summary = {
     latest: latest as Summary["latest"],
     today: {
@@ -144,6 +177,10 @@ async function buildSummary() {
       peak: round1(d.peak),
       off: round1(d.off),
     })),
+    phaseHistory: {
+      hourly: weekRows.map(toPhaseBucket),
+      daily: monthRows.map(toPhaseBucket),
+    },
     config: {
       peakStartHour: PEAK_START_HOUR,
       peakEndHour: PEAK_END_HOUR,
