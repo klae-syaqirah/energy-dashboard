@@ -23,10 +23,18 @@ function klNowParts(now: Date) {
   return { hour: kl.getUTCHours(), dow: kl.getUTCDay() };
 }
 
+function klDateKey(d: Date): string {
+  const kl = new Date(d.getTime() + 8 * 3600 * 1000);
+  const m = String(kl.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(kl.getUTCDate()).padStart(2, "0");
+  return `${kl.getUTCFullYear()}-${m}-${day}`;
+}
+
 export default function Dashboard() {
   const [data, setData] = useState<Summary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState<Date | null>(null);
+  const [profile, setProfile] = useState<"kilang" | "rumah">("kilang");
 
   useEffect(() => {
     let alive = true;
@@ -57,8 +65,10 @@ export default function Dashboard() {
   const latest = data?.latest ?? null;
   const cfg = data?.config;
   const { hour, dow } = klNowParts(now ?? new Date(0));
+  const holidayToday = !!now && !!cfg && cfg.holidays.includes(klDateKey(now));
   const peakNow =
-    !!now && dow >= 1 && dow <= 5 && !!cfg && hour >= cfg.peakStartHour && hour < cfg.peakEndHour;
+    !!now && dow >= 1 && dow <= 5 && !holidayToday && !!cfg &&
+    hour >= cfg.peakStartHour && hour < cfg.peakEndHour;
   const ageSec = latest && now ? (now.getTime() - new Date(latest.ts).getTime()) / 1000 : null;
   const live = ageSec !== null && ageSec < 30;
 
@@ -131,6 +141,29 @@ export default function Dashboard() {
 
       {data && latest && (
         <div className="stack">
+          <div className="grid-phases">
+            {phases.map((p) => (
+              <div className="card" key={p.name}>
+                <div className="phase-head">
+                  <span className="phase-swatch" style={{ background: `var(${p.tok})` }} />
+                  <span className="phase-name">Phase {p.name}</span>
+                  <span className="phase-desc">L–N</span>
+                </div>
+                <div className="phase-rows">
+                  <div className="phase-row"><span className="k">Voltage</span><span className="v">{fmt(p.v, 1, " V")}</span></div>
+                  <div className="phase-row"><span className="k">Current</span><span className="v">{fmt(p.a, 1, " A")}</span></div>
+                  <div className="phase-row"><span className="k">Active power</span><span className="v">{fmt(p.kw, 2, " kW")}</span></div>
+                </div>
+                <div className="phase-desc" style={{ marginBottom: 4 }}>Current · last hour</div>
+                <Sparkline
+                  values={lastHour.map((b) => b[p.key]).filter((v): v is number => v !== null)}
+                  colorVar={p.tok}
+                  label={`Phase ${p.name} current trend, last hour`}
+                />
+              </div>
+            ))}
+          </div>
+
           <div className="kpis" style={{ marginBottom: 0 }}>
             <div className="card kpi">
               <div className="label">Total Active Power</div>
@@ -161,12 +194,28 @@ export default function Dashboard() {
               </div>
             </div>
             <div className="card kpi">
-              <div className="label">Est. Cost Today</div>
+              <div className="label-row">
+                <div className="label">Est. Cost Today</div>
+                <div className="seg" role="group" aria-label="Tariff profile">
+                  <button className={profile === "kilang" ? "on" : ""} onClick={() => setProfile("kilang")}>
+                    Kilang
+                  </button>
+                  <button className={profile === "rumah" ? "on" : ""} onClick={() => setProfile("rumah")}>
+                    Rumah
+                  </button>
+                </div>
+              </div>
               <div className="value">
                 <small style={{ margin: "0 2px 0 0" }}>RM</small>
-                {data.today.costRm.toFixed(2)}
+                {(
+                  data.today.kwhPeak * data.config.tariffs[profile].peakRm +
+                  data.today.kwhOff * data.config.tariffs[profile].offRm
+                ).toFixed(2)}
               </div>
-              <div className="sub">estimate @ RM {data.config.tariffRm.toFixed(3)} / kWh</div>
+              <div className="sub">
+                RM {data.config.tariffs[profile].peakRm.toFixed(4)} peak · RM{" "}
+                {data.config.tariffs[profile].offRm.toFixed(4)} off-peak /kWh
+              </div>
             </div>
           </div>
 
@@ -180,33 +229,15 @@ export default function Dashboard() {
             />
           </div>
 
-          <div className="grid-phases">
-            {phases.map((p) => (
-              <div className="card" key={p.name}>
-                <div className="phase-head">
-                  <span className="phase-swatch" style={{ background: `var(${p.tok})` }} />
-                  <span className="phase-name">Phase {p.name}</span>
-                  <span className="phase-desc">L–N</span>
-                </div>
-                <div className="phase-rows">
-                  <div className="phase-row"><span className="k">Voltage</span><span className="v">{fmt(p.v, 1, " V")}</span></div>
-                  <div className="phase-row"><span className="k">Current</span><span className="v">{fmt(p.a, 1, " A")}</span></div>
-                  <div className="phase-row"><span className="k">Active power</span><span className="v">{fmt(p.kw, 2, " kW")}</span></div>
-                </div>
-                <div className="phase-desc" style={{ marginBottom: 4 }}>Current · last hour</div>
-                <Sparkline
-                  values={lastHour.map((b) => b[p.key]).filter((v): v is number => v !== null)}
-                  colorVar={p.tok}
-                  label={`Phase ${p.name} current trend, last hour`}
-                />
-              </div>
-            ))}
-          </div>
-
           <div className="card">
             <h2 className="section-title">Daily consumption — last 7 days (kWh)</h2>
-            <p className="section-sub">Split by tariff window · * today is partial</p>
-            <WeeklyBars days={data.daily} />
+            <p className="section-sub">
+              Split by ToU tariff window · weekends &amp; public holidays count as off-peak · * today is partial
+            </p>
+            <WeeklyBars
+              days={data.daily}
+              peakLabel={`Peak (${String(data.config.peakStartHour).padStart(2, "0")}:00–${String(data.config.peakEndHour).padStart(2, "0")}:00)`}
+            />
           </div>
         </div>
       )}

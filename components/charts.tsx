@@ -191,8 +191,10 @@ const bPlotH = B.h - B.t - B.b;
 
 export function WeeklyBars({
   days,
+  peakLabel,
 }: {
   days: { label: string; peak: number; off: number; today: boolean }[];
+  peakLabel: string;
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [hover, setHover] = useState<{ i: number; left: number } | null>(null);
@@ -289,7 +291,7 @@ export function WeeklyBars({
         </div>
       </div>
       <div className="legend">
-        <span><i style={{ background: "var(--bar-peak)" }} />Peak (08:00–22:00)</span>
+        <span><i style={{ background: "var(--bar-peak)" }} />{peakLabel}</span>
         <span><i style={{ background: "var(--bar-off)" }} />Off-peak</span>
       </div>
     </>

@@ -6,7 +6,8 @@ import {
   KL_OFFSET_MS,
   PEAK_START_HOUR,
   PEAK_END_HOUR,
-  TARIFF_RM_PER_KWH,
+  PUBLIC_HOLIDAYS,
+  TARIFF_PROFILES,
 } from "@/lib/config";
 
 export const dynamic = "force-dynamic";
@@ -38,10 +39,14 @@ export type Summary = {
     kwhTotal: number;
     kwhPeak: number;
     kwhOff: number;
-    costRm: number;
   };
   daily: { label: string; peak: number; off: number; today: boolean }[];
-  config: { peakStartHour: number; peakEndHour: number; tariffRm: number };
+  config: {
+    peakStartHour: number;
+    peakEndHour: number;
+    holidays: string[];
+    tariffs: typeof TARIFF_PROFILES;
+  };
 };
 
 const DAY_LABEL = new Intl.DateTimeFormat("en-GB", {
@@ -133,7 +138,6 @@ async function buildSummary() {
       kwhTotal: round1(kwhTotal),
       kwhPeak: round1(kwhPeak),
       kwhOff: round1(kwhOff),
-      costRm: Math.round(kwhTotal * TARIFF_RM_PER_KWH * 100) / 100,
     },
     daily: Array.from(byDay.values()).map((d) => ({
       ...d,
@@ -143,7 +147,8 @@ async function buildSummary() {
     config: {
       peakStartHour: PEAK_START_HOUR,
       peakEndHour: PEAK_END_HOUR,
-      tariffRm: TARIFF_RM_PER_KWH,
+      holidays: PUBLIC_HOLIDAYS,
+      tariffs: TARIFF_PROFILES,
     },
   };
   return NextResponse.json(summary);

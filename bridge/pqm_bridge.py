@@ -203,7 +203,7 @@ def main() -> None:
             r = read_meter(inst, big, settings)
             print(
                 f"{r['ts']}  {r['kw_total']:7.2f} kW total  "
-                f"| V {r['v1']:.0f}/{r['v2']:.0f}/{r['v3']:.0f}  "
+                f"| V {r['v1']:.1f}/{r['v2']:.1f}/{r['v3']:.1f}  "
                 f"| A {r['a1']:.1f}/{r['a2']:.1f}/{r['a3']:.1f}  "
                 f"| PF {r['pf']:.2f}  | in {r['energy_kwh']:.1f} / out {r['energy_export_kwh']:.1f} kWh"
                 + sanity_notes(r)
