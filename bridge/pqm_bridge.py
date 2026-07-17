@@ -50,9 +50,27 @@ def make_instrument(port: str, addr: int, baud: int) -> minimalmodbus.Instrument
     inst.serial.bytesize = 8
     inst.serial.parity = serial.PARITY_NONE
     inst.serial.stopbits = 1
-    inst.serial.timeout = 0.8
+    inst.serial.timeout = 1.5
     inst.clear_buffers_before_each_transaction = True
     return inst
+
+
+def read_block(inst: minimalmodbus.Instrument, addr: int, count: int, attempts: int = 3) -> list[int]:
+    """Read registers in one request, retrying — the PQM-1000s sometimes skips a beat.
+
+    Keep `count` small (~22 max): the meter answers 4-register reads reliably but
+    goes silent on large block reads (observed with 44 registers).
+    """
+    last: Exception | None = None
+    for _ in range(attempts):
+        try:
+            result = inst.read_registers(addr, count, functioncode=3)
+            time.sleep(0.05)  # brief gap so back-to-back requests don't overrun the meter
+            return result
+        except Exception as e:  # noqa: BLE001
+            last = e
+            time.sleep(0.2)
+    raise last if last else RuntimeError("unreachable")
 
 
 def s16(v: int) -> int:
@@ -82,7 +100,7 @@ def read_settings(inst: minimalmodbus.Instrument) -> dict:
     attach it to every reading as an audit trail. The instantaneous registers
     already return primary values (the meter applies the ratio itself).
     """
-    block = inst.read_registers(3840, 4, functioncode=3)
+    block = read_block(inst, 3840, 4)
     return {
         "device_code": block[0],  # fixed 0x0001 for PQM-1000s
         "ct_ratio": block[2],
@@ -91,10 +109,11 @@ def read_settings(inst: minimalmodbus.Instrument) -> dict:
 
 
 def read_meter(inst: minimalmodbus.Instrument, big: bool, settings: dict) -> dict:
-    # One block covers amps, volts, freq, per-phase kW and PF (regs 0..43).
-    block = inst.read_registers(0, 44, functioncode=3)
-    energy = inst.read_registers(48, 8, functioncode=3)   # import + export, uint64 each, x0.1 kWh
-    total = inst.read_registers(256, 2, functioncode=3)   # int32, x0.1 W
+    # Regs 0..43 cover amps, volts, freq, per-phase kW and PF — but the meter
+    # won't answer one 44-register read, so fetch it as two aligned chunks.
+    block = read_block(inst, 0, 22) + read_block(inst, 22, 22)
+    energy = read_block(inst, 48, 8)    # import + export, uint64 each, x0.1 kWh
+    total = read_block(inst, 256, 2)    # int32, x0.1 W
 
     return {
         "ts": datetime.now(timezone.utc).isoformat(),
