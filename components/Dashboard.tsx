@@ -103,6 +103,9 @@ export default function Dashboard() {
             {live ? "Live" : "No signal"}
           </span>
           {now && <span className="clock" suppressHydrationWarning>{CLOCK_FMT.format(now)}</span>}
+          <a className="btn-ghost" href="/api/export?days=7" download>
+            ⬇ CSV (7d)
+          </a>
           {cfg && (
             <span className={peakNow ? "pill-peak" : "pill-off"}>
               <svg width={13} height={13} viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
@@ -162,6 +165,45 @@ export default function Dashboard() {
                 />
               </div>
             ))}
+            <div className="card">
+              <div className="phase-head">
+                <span className="phase-name">Power quality</span>
+                <span className="phase-desc">IEEE limits</span>
+              </div>
+              <div className="phase-rows">
+                <PqRow
+                  label="V unbalance"
+                  value={latest.vAssym}
+                  unit="%"
+                  ok={latest.vAssym !== null && latest.vAssym < 2}
+                  okText="< 2%"
+                />
+                <PqRow
+                  label="THD voltage"
+                  value={worst(latest.thdV1, latest.thdV2, latest.thdV3)}
+                  unit="%"
+                  ok={(worst(latest.thdV1, latest.thdV2, latest.thdV3) ?? 99) < 5}
+                  okText="< 5%"
+                />
+                <PqRow
+                  label="THD current"
+                  value={worst(latest.thdI1, latest.thdI2, latest.thdI3)}
+                  unit="%"
+                  ok={(worst(latest.thdI1, latest.thdI2, latest.thdI3) ?? 99) < 8}
+                  okText="< 8%"
+                />
+                <PqRow
+                  label="Frequency"
+                  value={latest.freq}
+                  unit=" Hz"
+                  ok={latest.freq !== null && latest.freq >= 49.5 && latest.freq <= 50.5}
+                  okText="50 ±0.5"
+                />
+              </div>
+              <div className="phase-desc">
+                Worst phase shown for THD · values are noise until the voltage input is wired
+              </div>
+            </div>
           </div>
 
           <div className="kpis" style={{ marginBottom: 0 }}>
@@ -177,6 +219,14 @@ export default function Dashboard() {
                 <small>kWh</small>
               </div>
               <div className="sub">{peakPct !== null ? `${peakPct}% consumed during peak hours` : "no data yet today"}</div>
+            </div>
+            <div className="card kpi">
+              <div className="label">Max Demand</div>
+              <div className="value">
+                {latest.maxDmdKw !== null ? latest.maxDmdKw.toFixed(1) : "—"}
+                <small>kW</small>
+              </div>
+              <div className="sub">meter&apos;s recorded MD · drives RM 97.06/kW capacity charge (MV)</div>
             </div>
             <div className="card kpi">
               <div className="label">Power Factor</div>
@@ -216,6 +266,7 @@ export default function Dashboard() {
                 RM {data.config.tariffs[profile].peakRm.toFixed(4)} peak · RM{" "}
                 {data.config.tariffs[profile].offRm.toFixed(4)} off-peak /kWh
               </div>
+              <div className="sub" style={{ marginTop: 3 }}>{data.config.tariffs[profile].note}</div>
             </div>
           </div>
 
@@ -267,6 +318,39 @@ export default function Dashboard() {
 
 function fmt(v: number | null, dp: number, unit: string): string {
   return v === null ? "—" : `${v.toFixed(dp)}${unit}`;
+}
+
+function worst(...vals: (number | null)[]): number | null {
+  const nums = vals.filter((v): v is number => v !== null);
+  return nums.length ? Math.max(...nums) : null;
+}
+
+function PqRow({
+  label,
+  value,
+  unit,
+  ok,
+  okText,
+}: {
+  label: string;
+  value: number | null;
+  unit: string;
+  ok: boolean;
+  okText: string;
+}) {
+  return (
+    <div className="phase-row">
+      <span className="k">{label}</span>
+      <span className="v" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+        {value === null ? "—" : `${value.toFixed(value < 10 ? 1 : 0)}${unit}`}
+        {value !== null && (
+          <span className={ok ? "chip-good" : "chip-warn"} title={`limit: ${okText}`}>
+            {ok ? <CheckIcon /> : <BoltIcon />}
+          </span>
+        )}
+      </span>
+    </div>
+  );
 }
 
 function fmtKwh(v: number | null): string {

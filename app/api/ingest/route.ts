@@ -16,6 +16,10 @@ type IngestBody = {
   energy_export_kwh?: number;
   ct_ratio?: number;
   vt_ratio?: number;
+  v_assym?: number;
+  thd_v1?: number; thd_v2?: number; thd_v3?: number;
+  thd_i1?: number; thd_i2?: number; thd_i3?: number;
+  max_dmd_kw?: number;
 };
 
 function toRow(r: IngestBody): NewReading {
@@ -34,6 +38,10 @@ function toRow(r: IngestBody): NewReading {
     energyExportKwh: r.energy_export_kwh,
     ctRatio: r.ct_ratio,
     vtRatio: r.vt_ratio,
+    vAssym: r.v_assym,
+    thdV1: r.thd_v1, thdV2: r.thd_v2, thdV3: r.thd_v3,
+    thdI1: r.thd_i1, thdI2: r.thd_i2, thdI3: r.thd_i3,
+    maxDmdKw: r.max_dmd_kw,
   };
 }
 

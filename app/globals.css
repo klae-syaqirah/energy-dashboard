@@ -259,6 +259,21 @@ header {
   flex-wrap: wrap;
   margin-bottom: 10px;
 }
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 4px 11px;
+  font-size: 12.5px;
+  color: var(--ink-2);
+  text-decoration: none;
+}
+.btn-ghost:hover {
+  background: var(--accent-soft);
+  color: var(--ink);
+}
 .gauge {
   max-width: 210px;
   margin: 2px auto 0;

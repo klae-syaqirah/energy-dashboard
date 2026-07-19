@@ -43,6 +43,10 @@ export type Summary = {
     energyExportKwh: number | null;
     ctRatio: number | null;
     vtRatio: number | null;
+    vAssym: number | null;
+    thdV1: number | null; thdV2: number | null; thdV3: number | null;
+    thdI1: number | null; thdI2: number | null; thdI3: number | null;
+    maxDmdKw: number | null;
   } | null;
   today: {
     series: SummaryBucket[];
@@ -87,7 +91,11 @@ async function buildSummary() {
     sql`SELECT ts, v1, v2, v3, a1, a2, a3, kw1, kw2, kw3,
                kw_total AS "kwTotal", pf, freq, energy_kwh AS "energyKwh",
                energy_export_kwh AS "energyExportKwh",
-               ct_ratio AS "ctRatio", vt_ratio AS "vtRatio"
+               ct_ratio AS "ctRatio", vt_ratio AS "vtRatio",
+               v_assym AS "vAssym",
+               thd_v1 AS "thdV1", thd_v2 AS "thdV2", thd_v3 AS "thdV3",
+               thd_i1 AS "thdI1", thd_i2 AS "thdI2", thd_i3 AS "thdI3",
+               max_dmd_kw AS "maxDmdKw"
         FROM readings ORDER BY ts DESC LIMIT 1`,
     sql`SELECT floor(extract(epoch FROM ts) / 300) * 300 AS e,
                avg(kw_total) AS kw, avg(a1) AS a1, avg(a2) AS a2, avg(a3) AS a3

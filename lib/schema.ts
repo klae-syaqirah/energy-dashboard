@@ -30,6 +30,16 @@ export const readings = pgTable(
     // CT/VT ratio configured in the instrument at reading time (varies per installation)
     ctRatio: real("ct_ratio"),
     vtRatio: real("vt_ratio"),
+    // power quality
+    vAssym: real("v_assym"), // voltage unbalance %
+    thdV1: real("thd_v1"),
+    thdV2: real("thd_v2"),
+    thdV3: real("thd_v3"),
+    thdI1: real("thd_i1"),
+    thdI2: real("thd_i2"),
+    thdI3: real("thd_i3"),
+    // meter's max-demand register (kW) — drives the TNB capacity charge
+    maxDmdKw: real("max_dmd_kw"),
   },
   (t) => [index("readings_ts_idx").on(t.ts)]
 );

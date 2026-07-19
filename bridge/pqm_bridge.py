@@ -113,6 +113,8 @@ def read_meter(inst: minimalmodbus.Instrument, big: bool, settings: dict) -> dic
     # won't answer one 44-register read, so fetch it as two aligned chunks.
     block = read_block(inst, 0, 22) + read_block(inst, 22, 22)
     energy = read_block(inst, 48, 8)    # import + export, uint64 each, x0.1 kWh
+    demand = read_block(inst, 74, 2)    # max demand kW total (import), uint32, x0.1 W
+    thd = read_block(inst, 117, 6)      # THD V1-3 then I1-3, x0.1 %
     total = read_block(inst, 256, 2)    # int32, x0.1 W
 
     return {
@@ -134,6 +136,14 @@ def read_meter(inst: minimalmodbus.Instrument, big: bool, settings: dict) -> dic
         "kw_total": round(s32(total, 0, big) * 0.1 / 1000, 3),
         "ct_ratio": settings["ct_ratio"],
         "vt_ratio": settings["vt_ratio"],
+        "v_assym": round(block[20] * 0.1, 1),
+        "max_dmd_kw": round(u32(demand, 0, big) * 0.1 / 1000, 3),
+        "thd_v1": round(thd[0] * 0.1, 1),
+        "thd_v2": round(thd[1] * 0.1, 1),
+        "thd_v3": round(thd[2] * 0.1, 1),
+        "thd_i1": round(thd[3] * 0.1, 1),
+        "thd_i2": round(thd[4] * 0.1, 1),
+        "thd_i3": round(thd[5] * 0.1, 1),
     }
 
 
