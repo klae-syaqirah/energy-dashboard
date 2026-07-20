@@ -111,6 +111,11 @@ export type SimResult = {
     savingsPct: number;
     avgChargeMinutes: number | null;
     avgHoursHeldInPeak: number | null;
+    /** RM value of energy still sitting in the battery when the data window
+     * ends — it was already paid for at off-peak rates but hasn't displaced
+     * a peak purchase yet. Included in savingsRm so a report that happens to
+     * end mid-charge-cycle doesn't look artificially worse. */
+    endingInventoryRm: number;
   };
 };
 
@@ -204,6 +209,8 @@ export function simulate(points: LoadPoint[], spec: BatterySpec, profile: Tariff
   const costBefore = sum(perDay.map((d) => d.costBefore));
   const costAfter = sum(perDay.map((d) => d.costAfter));
   const kwhShifted = sum(perDay.map((d) => d.peakKwhBefore - d.peakKwhAfter));
+  // Value what's still stored at the end of the window at its future peak-displacing worth.
+  const endingInventoryRm = soc * dischargeEff * tariff.peakRm;
 
   const chargeMinutes = perDay
     .filter((d) => d.chargedFullyBy)
@@ -219,10 +226,11 @@ export function simulate(points: LoadPoint[], spec: BatterySpec, profile: Tariff
       kwhShiftedPeakToOff: round2(kwhShifted),
       costBefore: round2(costBefore),
       costAfter: round2(costAfter),
-      savingsRm: round2(costBefore - costAfter),
-      savingsPct: costBefore > 0 ? round2(((costBefore - costAfter) / costBefore) * 100) : 0,
+      savingsRm: round2(costBefore - costAfter + endingInventoryRm),
+      savingsPct: costBefore > 0 ? round2(((costBefore - costAfter + endingInventoryRm) / costBefore) * 100) : 0,
       avgChargeMinutes: chargeMinutes.length ? Math.round(avg(chargeMinutes)) : null,
       avgHoursHeldInPeak: heldHours.length ? round2(avg(heldHours)) : null,
+      endingInventoryRm: round2(endingInventoryRm),
     },
   };
 }
