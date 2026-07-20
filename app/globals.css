@@ -274,6 +274,26 @@ header {
   background: var(--accent-soft);
   color: var(--ink);
 }
+.format-help {
+  margin-bottom: 14px;
+}
+.format-help summary {
+  cursor: pointer;
+  font-size: 12.5px;
+  color: var(--accent);
+  font-weight: 600;
+  user-select: none;
+  width: fit-content;
+}
+.format-help summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+.format-help .format-example {
+  margin-top: 10px;
+  min-width: 320px;
+}
 .dropzone {
   border: 1.5px dashed var(--border);
   border-radius: 10px;

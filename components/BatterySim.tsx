@@ -78,6 +78,26 @@ export default function BatterySim() {
             Excel export with columns Date, Date, Time, Total (kW) — one row per minute. Nothing is
             uploaded anywhere; it&apos;s parsed right here in your browser.
           </p>
+          <details className="format-help">
+            <summary>Need help formatting your file?</summary>
+            <div className="scroll-x">
+              <table className="bess-table format-example">
+                <thead>
+                  <tr><th>Date</th><th>Date</th><th>Time</th><th>Total</th></tr>
+                </thead>
+                <tbody>
+                  <tr><td>1/4/2026</td><td></td><td>00:00</td><td>1726.16</td></tr>
+                  <tr><td>1/4/2026</td><td></td><td>00:01</td><td>1920.48</td></tr>
+                  <tr><td>1/4/2026</td><td></td><td>00:02</td><td>1952.52</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p className="phase-desc" style={{ marginTop: 8 }}>
+              Column A = date, column C = time, column D = total load in kW — one row per minute.
+              Column B can be left empty (many meter exports merge it). The header text and sheet
+              name don&apos;t matter, only the column order — and any columns after D are ignored.
+            </p>
+          </details>
           <div
             className={`dropzone${dragOver ? " over" : ""}`}
             onClick={() => fileInput.current?.click()}
