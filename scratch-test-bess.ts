@@ -11,6 +11,7 @@ console.log("last point:", parsed.points[parsed.points.length - 1]);
 
 const sim = simulate(parsed.points, { capacityKwh: 500, maxChargeKw: 250, maxDischargeKw: 250, roundTripEff: 0.92 }, "kilang");
 console.log("\ntotals:", sim.totals);
+console.log("EXPECT: savingsRm should now be positive (~+RM120-140 for a 500kWh/250kW battery over 21 days)");
 console.log("\nfirst 3 day summaries:");
 for (const d of sim.perDay.slice(0, 3)) console.log(" ", d);
 

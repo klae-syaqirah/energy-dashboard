@@ -143,8 +143,15 @@ export default function BatterySim() {
                 <div className="label">Est. Savings ({parsed.days.length}-day period)</div>
                 <div className="value"><small style={{ margin: "0 2px 0 0" }}>RM</small>{sim.totals.savingsRm.toFixed(2)}</div>
                 <div className="sub">
-                  <span className="chip-good">{sim.totals.savingsPct.toFixed(1)}% lower than TNB-only</span>
+                  <span className={sim.totals.savingsRm >= 0 ? "chip-good" : "chip-warn"}>
+                    {sim.totals.savingsPct.toFixed(1)}% vs TNB-only
+                  </span>
                 </div>
+                {sim.totals.endingInventoryRm > 1 && (
+                  <div className="sub" style={{ marginTop: 3 }}>
+                    incl. RM {sim.totals.endingInventoryRm.toFixed(2)} still stored in the battery at period end
+                  </div>
+                )}
               </div>
               <div className="card kpi">
                 <div className="label">Peak Energy Shifted</div>
