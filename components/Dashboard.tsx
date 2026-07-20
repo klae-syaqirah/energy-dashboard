@@ -36,12 +36,13 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState<Date | null>(null);
   const [profile, setProfile] = useState<"kilang" | "rumah">("kilang");
+  const [rangeDays, setRangeDays] = useState<7 | 14 | 30>(7);
 
   useEffect(() => {
     let alive = true;
     async function load() {
       try {
-        const res = await fetch("/api/summary", { cache: "no-store" });
+        const res = await fetch(`/api/summary?days=${rangeDays}`, { cache: "no-store" });
         if (!res.ok) throw new Error(`API ${res.status}: ${(await res.json()).error ?? res.statusText}`);
         if (alive) {
           setData(await res.json());
@@ -53,11 +54,16 @@ export default function Dashboard() {
     }
     load();
     const poll = setInterval(load, POLL_MS);
-    const clock = setInterval(() => setNow(new Date()), 1000);
-    const firstTick = setTimeout(() => setNow(new Date()), 0);
     return () => {
       alive = false;
       clearInterval(poll);
+    };
+  }, [rangeDays]);
+
+  useEffect(() => {
+    const clock = setInterval(() => setNow(new Date()), 1000);
+    const firstTick = setTimeout(() => setNow(new Date()), 0);
+    return () => {
       clearInterval(clock);
       clearTimeout(firstTick);
     };
@@ -107,8 +113,15 @@ export default function Dashboard() {
           <Link className="btn-ghost" href="/battery-sim">
             Battery Simulator →
           </Link>
-          <a className="btn-ghost" href="/api/export?days=7" download>
-            ⬇ CSV (7d)
+          <div className="seg" role="group" aria-label="History range">
+            {([7, 14, 30] as const).map((d) => (
+              <button key={d} className={rangeDays === d ? "on" : ""} onClick={() => setRangeDays(d)}>
+                {d}d
+              </button>
+            ))}
+          </div>
+          <a className="btn-ghost" href={`/api/export?days=${rangeDays}`} download>
+            ⬇ CSV
           </a>
           {cfg && (
             <span className={peakNow ? "pill-peak" : "pill-off"}>
@@ -285,15 +298,15 @@ export default function Dashboard() {
           </div>
 
           <div className="card">
-            <h2 className="section-title">Phase history</h2>
+            <h2 className="section-title">Phase history — last {data.config.rangeDays} days</h2>
             <p className="section-sub">
-              Average per phase — spot imbalance between L1 / L2 / L3 over time
+              Average per phase, hourly — spot imbalance between L1 / L2 / L3 over time
             </p>
-            <PhaseHistoryChart hourly={data.phaseHistory.hourly} daily={data.phaseHistory.daily} />
+            <PhaseHistoryChart points={data.phaseHistory} days={data.config.rangeDays} />
           </div>
 
           <div className="card">
-            <h2 className="section-title">Daily consumption — last 7 days (kWh)</h2>
+            <h2 className="section-title">Daily consumption — last {data.config.rangeDays} days (kWh)</h2>
             <p className="section-sub">
               Split by ToU tariff window · weekends &amp; public holidays count as off-peak · * today is partial
             </p>

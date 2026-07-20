@@ -202,8 +202,10 @@ export function WeeklyBars({
   const bMax = niceMax(days.reduce((m, d) => Math.max(m, d.peak + d.off), 0), 100);
   const by = (v: number) => B.t + (1 - v / bMax) * bPlotH;
   const groupW = bPlotW / days.length;
-  const barW = 54;
+  const barW = Math.max(6, Math.min(54, groupW * 0.62));
   const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => f * bMax);
+  // thin x-axis labels once there isn't room for one per bar
+  const labelStep = Math.max(1, Math.ceil(days.length / 10));
 
   function onMove(evt: React.MouseEvent<SVGSVGElement>) {
     if (!wrapRef.current) return;
@@ -225,7 +227,7 @@ export function WeeklyBars({
         <svg
           viewBox={`0 0 ${B.w} ${B.h}`}
           role="img"
-          aria-label="Stacked bar chart of daily energy consumption for the last 7 days, split into peak and off-peak"
+          aria-label={`Stacked bar chart of daily energy consumption for the last ${days.length} days, split into peak and off-peak`}
           onMouseMove={onMove}
           onMouseLeave={() => setHover(null)}
         >
@@ -259,16 +261,18 @@ export function WeeklyBars({
                     {Math.round(total)} kWh
                   </text>
                 )}
-                <text
-                  x={cx}
-                  y={B.t + bPlotH + 20}
-                  fontSize={11}
-                  textAnchor="middle"
-                  fill={day.today ? "var(--ink-2)" : "var(--muted)"}
-                  fontWeight={day.today ? 650 : 400}
-                >
-                  {day.label}{day.today ? "*" : ""}
-                </text>
+                {(day.today || i % labelStep === 0) && (
+                  <text
+                    x={cx}
+                    y={B.t + bPlotH + 20}
+                    fontSize={11}
+                    textAnchor="middle"
+                    fill={day.today ? "var(--ink-2)" : "var(--muted)"}
+                    fontWeight={day.today ? 650 : 400}
+                  >
+                    {day.label}{day.today ? "*" : ""}
+                  </text>
+                )}
               </g>
             );
           })}
@@ -310,25 +314,19 @@ const PHASES = [
   { name: "L3", tok: "--phase-3", a: "a3", k: "k3" },
 ] as const;
 
-const FMT_DAY = new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", timeZone: "Asia/Kuala_Lumpur" });
 const FMT_DATE = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", timeZone: "Asia/Kuala_Lumpur" });
 
-export function PhaseHistoryChart({ hourly, daily }: { hourly: PhaseBucket[]; daily: PhaseBucket[] }) {
+export function PhaseHistoryChart({ points, days }: { points: PhaseBucket[]; days: number }) {
   const wrapRef = useRef<HTMLDivElement>(null);
-  const [range, setRange] = useState<"7d" | "30d">("7d");
   const [metric, setMetric] = useState<"a" | "kw">("a");
   const [hover, setHover] = useState<{ i: number; left: number; top: number } | null>(null);
 
-  const data = range === "7d" ? hourly : daily;
+  const data = points;
   const unit = metric === "a" ? "A" : "kW";
   const val = (b: PhaseBucket, p: (typeof PHASES)[number]) => (metric === "a" ? b[p.a] : b[p.k]);
 
   const controls = (
     <div className="chart-controls">
-      <div className="seg" role="group" aria-label="Time range">
-        <button className={range === "7d" ? "on" : ""} onClick={() => setRange("7d")}>7 days</button>
-        <button className={range === "30d" ? "on" : ""} onClick={() => setRange("30d")}>30 days</button>
-      </div>
       <div className="seg" role="group" aria-label="Metric">
         <button className={metric === "a" ? "on" : ""} onClick={() => setMetric("a")}>Current (A)</button>
         <button className={metric === "kw" ? "on" : ""} onClick={() => setMetric("kw")}>Power (kW)</button>
@@ -354,7 +352,7 @@ export function PhaseHistoryChart({ hourly, daily }: { hourly: PhaseBucket[]; da
   );
   const y = (v: number) => P.t + (1 - v / yMax) * pPlotH;
   const fmtTick = (v: number) => (Number.isInteger(v) ? String(v) : v.toFixed(1));
-  const fmtX = (e: number) => (range === "7d" ? FMT_DAY : FMT_DATE).format(new Date(e * 1000));
+  const fmtX = (e: number) => FMT_DATE.format(new Date(e * 1000));
 
   const xTicks = [0, 0.2, 0.4, 0.6, 0.8, 1].map((f) => e0 + f * (e1 - e0));
 
@@ -399,7 +397,7 @@ export function PhaseHistoryChart({ hourly, daily }: { hourly: PhaseBucket[]; da
         <svg
           viewBox={`0 0 ${P.w} ${P.h}`}
           role="img"
-          aria-label={`Line chart of average ${metric === "a" ? "current" : "power"} per phase over the last ${range === "7d" ? "7" : "30"} days`}
+          aria-label={`Line chart of average ${metric === "a" ? "current" : "power"} per phase over the last ${days} days`}
           onMouseMove={onMove}
           onMouseLeave={() => setHover(null)}
         >
@@ -412,11 +410,15 @@ export function PhaseHistoryChart({ hourly, daily }: { hourly: PhaseBucket[]; da
               </g>
             );
           })}
-          {xTicks.map((e, i) => (
-            <text key={i} x={x(e)} y={P.t + pPlotH + 20} fontSize={11} textAnchor="middle" fill="var(--muted)">
-              {fmtX(e)}
-            </text>
-          ))}
+          {xTicks.map((e, i) => {
+            const label = fmtX(e);
+            if (i > 0 && label === fmtX(xTicks[i - 1])) return null; // avoid repeating the same date twice
+            return (
+              <text key={i} x={x(e)} y={P.t + pPlotH + 20} fontSize={11} textAnchor="middle" fill="var(--muted)">
+                {label}
+              </text>
+            );
+          })}
 
           {lines.map((l) =>
             l.pts.length > 1 ? (
@@ -459,7 +461,7 @@ export function PhaseHistoryChart({ hourly, daily }: { hourly: PhaseBucket[]; da
           {hovered && (
             <>
               <div className="t-title">
-                {range === "7d" ? `${FMT_DAY.format(new Date(hovered.e * 1000))} · ${fmtTimeKL(hovered.e)}` : FMT_DATE.format(new Date(hovered.e * 1000))}
+                {FMT_DATE.format(new Date(hovered.e * 1000))} · {fmtTimeKL(hovered.e)}
               </div>
               {PHASES.map((p) => {
                 const v = val(hovered, p);

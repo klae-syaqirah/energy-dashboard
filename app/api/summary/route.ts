@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getSql } from "@/lib/db";
 import {
   isPeakEpoch,
@@ -55,15 +55,13 @@ export type Summary = {
     kwhOff: number;
   };
   daily: { label: string; peak: number; off: number; today: boolean }[];
-  phaseHistory: {
-    hourly: PhaseBucket[]; // last 7 days, 1-hour buckets
-    daily: PhaseBucket[]; // last 30 days, 1-KL-day buckets
-  };
+  phaseHistory: PhaseBucket[]; // 1-hour buckets, spanning `rangeDays`
   config: {
     peakStartHour: number;
     peakEndHour: number;
     holidays: string[];
     tariffs: typeof TARIFF_PROFILES;
+    rangeDays: number;
   };
 };
 
@@ -73,21 +71,21 @@ const DAY_LABEL = new Intl.DateTimeFormat("en-GB", {
   timeZone: "Asia/Kuala_Lumpur",
 });
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const days = Math.min(30, Math.max(1, Number(req.nextUrl.searchParams.get("days") ?? "7") || 7));
   try {
-    return await buildSummary();
+    return await buildSummary(days);
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });
   }
 }
 
-async function buildSummary() {
+async function buildSummary(days: number) {
   const sql = getSql();
   const todayStart = klMidnightUtc(0);
-  const weekStart = klMidnightUtc(6);
-  const monthStart = klMidnightUtc(29);
+  const rangeStart = klMidnightUtc(days - 1);
 
-  const [latestRows, todayRows, weekRows, monthRows] = await Promise.all([
+  const [latestRows, todayRows, rangeRows] = await Promise.all([
     sql`SELECT ts, v1, v2, v3, a1, a2, a3, kw1, kw2, kw3,
                kw_total AS "kwTotal", pf, freq, energy_kwh AS "energyKwh",
                energy_export_kwh AS "energyExportKwh",
@@ -105,13 +103,7 @@ async function buildSummary() {
                avg(kw_total) AS kw,
                avg(a1) AS a1, avg(a2) AS a2, avg(a3) AS a3,
                avg(kw1) AS k1, avg(kw2) AS k2, avg(kw3) AS k3
-        FROM readings WHERE ts >= ${weekStart.toISOString()}
-        GROUP BY 1 ORDER BY 1`,
-    // 1-KL-day buckets (UTC+8 = 28800 s shift)
-    sql`SELECT floor((extract(epoch FROM ts) + 28800) / 86400) * 86400 - 28800 AS e,
-               avg(a1) AS a1, avg(a2) AS a2, avg(a3) AS a3,
-               avg(kw1) AS k1, avg(kw2) AS k2, avg(kw3) AS k3
-        FROM readings WHERE ts >= ${monthStart.toISOString()}
+        FROM readings WHERE ts >= ${rangeStart.toISOString()}
         GROUP BY 1 ORDER BY 1`,
   ]);
 
@@ -132,11 +124,11 @@ async function buildSummary() {
   }
   const kwhTotal = kwhPeak + kwhOff;
 
-  // --- last 7 days: hourly buckets → per-KL-day peak/off split
+  // --- range: hourly buckets → per-KL-day peak/off split
   const todayKey = klDayKey(Date.now() / 1000);
   const byDay = new Map<string, { label: string; peak: number; off: number; today: boolean }>();
-  // Pre-seed all 7 days so days without data still show as zero bars
-  for (let i = 6; i >= 0; i--) {
+  // Pre-seed every day in range so days without data still show as zero bars
+  for (let i = days - 1; i >= 0; i--) {
     const d = klMidnightUtc(i);
     const key = klDayKey(d.getTime() / 1000 + 60); // nudge inside the day
     byDay.set(key, {
@@ -146,7 +138,7 @@ async function buildSummary() {
       today: key === todayKey,
     });
   }
-  for (const r of weekRows) {
+  for (const r of rangeRows) {
     const e = Number(r.e);
     const day = byDay.get(klDayKey(e));
     if (!day) continue;
@@ -185,15 +177,13 @@ async function buildSummary() {
       peak: round1(d.peak),
       off: round1(d.off),
     })),
-    phaseHistory: {
-      hourly: weekRows.map(toPhaseBucket),
-      daily: monthRows.map(toPhaseBucket),
-    },
+    phaseHistory: rangeRows.map(toPhaseBucket),
     config: {
       peakStartHour: PEAK_START_HOUR,
       peakEndHour: PEAK_END_HOUR,
       holidays: PUBLIC_HOLIDAYS,
       tariffs: TARIFF_PROFILES,
+      rangeDays: days,
     },
   };
   return NextResponse.json(summary);
