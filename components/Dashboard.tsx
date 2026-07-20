@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import type { Summary } from "@/app/api/summary/route";
 import { Gauge, LoadChart, PhaseHistoryChart, Sparkline, WeeklyBars, niceMax } from "@/components/charts";
 
@@ -103,6 +104,9 @@ export default function Dashboard() {
             {live ? "Live" : "No signal"}
           </span>
           {now && <span className="clock" suppressHydrationWarning>{CLOCK_FMT.format(now)}</span>}
+          <Link className="btn-ghost" href="/battery-sim">
+            Battery Simulator →
+          </Link>
           <a className="btn-ghost" href="/api/export?days=7" download>
             ⬇ CSV (7d)
           </a>
